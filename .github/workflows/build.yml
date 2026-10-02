@@ -119,7 +119,10 @@ jobs:
           git clone --depth=1 --single-branch "$MANIFEST_URL" "$GITHUB_WORKSPACE/orangefox-sync"
           cd "$GITHUB_WORKSPACE/orangefox-sync"
           ./orangefox_sync.sh --branch "$MANIFEST_BRANCH" --path "$GITHUB_WORKSPACE"
-          echo "Disk usage after OrangeFox sync:"
+          echo "Removing OrangeFox repo metadata..."
+          rm -rf "$GITHUB_WORKSPACE/.repo"
+          find "$GITHUB_WORKSPACE" -type d -name ".git" -prune -exec rm -rf {} +
+          echo "Disk usage after removing .repo and .git:"
           df -h
 
       - name: Restore ccache
