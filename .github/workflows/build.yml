@@ -30,7 +30,7 @@ on:
       device_tree_path:
         description: 'Device tree path under the Android source tree'
         required: true
-        default: 'device/oplus/infiniti'
+        default: 'device/oneplus/infiniti'
 
 jobs:
   build:
