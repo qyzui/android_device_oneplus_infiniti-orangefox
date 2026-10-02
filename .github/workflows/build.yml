@@ -132,8 +132,10 @@ jobs:
       - name: Initialize OrangeFox source
         run: |
           cd "$GITHUB_WORKSPACE"
-          repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH" --no-repo-verify
-          repo sync -c --force-sync --no-tags --no-clone-bundle --optimized-fetch -j"$(nproc --all)"
+          rm -rf "$GITHUB_WORKSPACE/orangefox-sync"
+          git clone --depth=1 --single-branch "$MANIFEST_URL" "$GITHUB_WORKSPACE/orangefox-sync"
+          cd "$GITHUB_WORKSPACE/orangefox-sync"
+          ./orangefox_sync.sh --branch "$MANIFEST_BRANCH" --path "$GITHUB_WORKSPACE"
 
       - name: Fetch device tree
         run: |
