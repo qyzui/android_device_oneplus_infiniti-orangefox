@@ -100,9 +100,27 @@ jobs:
         run: |
           mkdir -p "$CCACHE_DIR"
           ccache --set-config=cache_dir="$CCACHE_DIR"
-          ccache --set-config=max_size=10G
+          ccache --set-config=max_size=5G
           ccache --set-config=compression=true
           ccache --zero-stats
+
+      - name: Install repo tool
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
+          chmod a+rx "$HOME/bin/repo"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          "$HOME/bin/repo" --version
+
+      - name: Initialize OrangeFox source
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          rm -rf "$GITHUB_WORKSPACE/orangefox-sync"
+          git clone --depth=1 --single-branch "$MANIFEST_URL" "$GITHUB_WORKSPACE/orangefox-sync"
+          cd "$GITHUB_WORKSPACE/orangefox-sync"
+          ./orangefox_sync.sh --branch "$MANIFEST_BRANCH" --path "$GITHUB_WORKSPACE"
+          echo "Disk usage after OrangeFox sync:"
+          df -h
 
       - name: Restore ccache
         id: ccache
@@ -120,22 +138,9 @@ jobs:
           else
             echo "Restored ccache from the nearest available cache, or no cache was available."
           fi
+          echo "Disk usage after ccache restore:"
+          df -h
 
-      - name: Install repo tool
-        run: |
-          mkdir -p "$HOME/bin"
-          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
-          chmod a+rx "$HOME/bin/repo"
-          echo "$HOME/bin" >> "$GITHUB_PATH"
-          "$HOME/bin/repo" --version
-
-      - name: Initialize OrangeFox source
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          rm -rf "$GITHUB_WORKSPACE/orangefox-sync"
-          git clone --depth=1 --single-branch "$MANIFEST_URL" "$GITHUB_WORKSPACE/orangefox-sync"
-          cd "$GITHUB_WORKSPACE/orangefox-sync"
-          ./orangefox_sync.sh --branch "$MANIFEST_BRANCH" --path "$GITHUB_WORKSPACE"
 
       - name: Fetch device tree
         run: |
