@@ -1,0 +1,225 @@
+name: OrangeFox R12 Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest_url:
+        description: 'OrangeFox manifest repository URL'
+        required: true
+        default: 'https://gitlab.com/OrangeFox/sync.git'
+      manifest_branch:
+        description: 'OrangeFox sync branch'
+        required: true
+        default: '14.1'
+      device_tree_url:
+        description: 'Device tree repository URL'
+        required: true
+        default: 'https://github.com/qyzui/android_device_oneplus_infiniti-orangefox.git'
+      device_tree_branch:
+        description: 'Device tree branch'
+        required: true
+        default: 'source-test-r12'
+      device_name:
+        description: 'Device codename / product name'
+        required: true
+        default: 'infiniti'
+      lunch_target:
+        description: 'Lunch target'
+        required: true
+        default: 'twrp_infiniti-ap2a-eng'
+      device_tree_path:
+        description: 'Device tree path under the Android source tree'
+        required: true
+        default: 'device/oplus/infiniti'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      MANIFEST_URL: ${{ inputs.manifest_url }}
+      MANIFEST_BRANCH: ${{ inputs.manifest_branch }}
+      DEVICE_TREE_URL: ${{ inputs.device_tree_url }}
+      DEVICE_TREE_BRANCH: ${{ inputs.device_tree_branch }}
+      DEVICE_NAME: ${{ inputs.device_name }}
+      LUNCH_TARGET: ${{ inputs.lunch_target }}
+      DEVICE_TREE_PATH: ${{ inputs.device_tree_path }}
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git git-lfs gnupg gperf imagemagick lib32ncurses-dev lib32readline-dev \
+            lib32z1-dev libelf-dev liblz4-tool libncurses6 libncurses-dev \
+            libssl-dev libxml2-utils lz4 lzip pngcrush rsync schedtool squashfs-tools \
+            unzip xsltproc zip zlib1g-dev
+
+      - name: Free maximum available disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker system prune -af || true
+          sudo apt-get clean
+          df -h
+
+      - name: Configure swap
+        shell: bash
+        run: |
+          echo "Current memory:"
+          free -h
+          echo "Current swap:"
+          swapon --show || true
+
+          if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl stop swap.target 2>/dev/null || true
+          fi
+
+          sudo swapoff -a 2>/dev/null || true
+          sudo rm -f /swapfile
+
+          TOTAL_RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
+          SWAP_MB=$((TOTAL_RAM_MB * 2))
+          [ "$SWAP_MB" -lt 8192 ] && SWAP_MB=8192
+          [ "$SWAP_MB" -gt 32768 ] && SWAP_MB=32768
+
+          sudo fallocate -l "${SWAP_MB}M" /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
+          echo "Configured swap:"
+          free -h
+          swapon --show
+
+      - name: Configure ccache
+        run: |
+          mkdir -p "$CCACHE_DIR"
+          ccache --set-config=cache_dir="$CCACHE_DIR"
+          ccache --set-config=max_size=10G
+          ccache --set-config=compression=true
+          ccache --zero-stats
+
+      - name: Restore ccache
+        id: ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ${{ runner.os }}-orangefox14.1-ccache-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-orangefox14.1-ccache-
+
+      - name: Show cache status
+        run: |
+          if [ "${{ steps.ccache.outputs.cache-hit }}" = "true" ]; then
+            echo "Exact ccache cache hit."
+          else
+            echo "Restored ccache from the nearest available cache, or no cache was available."
+          fi
+
+      - name: Install repo tool
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
+          chmod a+rx "$HOME/bin/repo"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          "$HOME/bin/repo" --version
+
+      - name: Initialize OrangeFox source
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH" --no-repo-verify
+          repo sync -c --force-sync --no-tags --no-clone-bundle --optimized-fetch -j"$(nproc --all)"
+
+      - name: Fetch device tree
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          rm -rf "$DEVICE_TREE_PATH"
+          mkdir -p "$(dirname "$DEVICE_TREE_PATH")"
+          git clone --depth=1 --single-branch --branch "$DEVICE_TREE_BRANCH" \
+            "$DEVICE_TREE_URL" "$DEVICE_TREE_PATH"
+
+      - name: Apply device tree patches
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          PATCH_ROOT="$GITHUB_WORKSPACE/$DEVICE_TREE_PATH/patches"
+
+          if [ ! -d "$PATCH_ROOT" ]; then
+            echo "No patches directory: $PATCH_ROOT"
+            exit 0
+          fi
+
+          mapfile -d '' PATCHES < <(
+            find "$PATCH_ROOT" -type f -name '*.patch' -print0 | sort -z
+          )
+
+          if [ "${#PATCHES[@]}" -eq 0 ]; then
+            echo "No .patch files found in $PATCH_ROOT"
+            exit 0
+          fi
+
+          echo "Found ${#PATCHES[@]} patch(es)"
+
+          for patch_file in "${PATCHES[@]}"; do
+            rel="${patch_file#"$PATCH_ROOT"/}"
+            target="$(dirname "$rel")"
+
+            if [ "$target" = "." ]; then
+              echo "==> AOSP root: $rel"
+              patch -p1 --forward --batch < "$patch_file"
+              result=$?
+              if [ "$result" -ne 0 ]; then
+                echo "Patch failed: $patch_file"
+                exit "$result"
+              fi
+            else
+              if [ ! -d "$GITHUB_WORKSPACE/$target" ]; then
+                echo "Target directory missing: $target"
+                echo "Patch: $rel"
+                exit 1
+              fi
+
+              echo "==> $target: $rel"
+              cd "$GITHUB_WORKSPACE/$target"
+              patch -p1 --forward --batch < "$patch_file"
+              result=$?
+              if [ "$result" -ne 0 ]; then
+                echo "Patch failed: $patch_file"
+                exit "$result"
+              fi
+              cd "$GITHUB_WORKSPACE"
+            fi
+          done
+
+      - name: Build OrangeFox recovery
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          export USE_CCACHE=1
+          export CCACHE_EXEC=/usr/bin/ccache
+          export CCACHE_DIR="$CCACHE_DIR"
+          export CCACHE_NOHASHDIR=1
+          export CCACHE_SLOPPINESS=time_macros,include_file_mtime,file_macro
+          export CCACHE_COMPILERCHECK=content
+
+          source build/envsetup.sh
+          lunch "$LUNCH_TARGET"
+          mka adbd recoveryimage
+
+      - name: Show ccache statistics
+        if: always()
+        run: ccache --show-stats || true
+
+      - name: Upload recovery image
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: orangefox-r12-${{ inputs.device_name }}-recovery
+          path: |
+            out/target/product/${{ inputs.device_name }}/recovery.img
+            out/target/product/${{ inputs.device_name }}/vendor_boot.img
+          if-no-files-found: ignore
