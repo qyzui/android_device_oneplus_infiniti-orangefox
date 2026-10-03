@@ -56,6 +56,9 @@ if [ "$1" = "$FDEVICE" -o "$FOX_BUILD_DEVICE" = "$FDEVICE" ]; then
 	export FOX_MISCELLANEOUS_ROOT_DIRECTORY=/sdcard
 	export FOX_ALLOW_EARLY_SETTINGS_LOAD=1
 
+	# Skip LLNDK ABI dumps; recovery tree does not ship VNDK references
+	export SKIP_ABI_CHECKS=true
+
 	# For OnePlus 15
 	export TARGET_DEVICE_ALT="PLK110,OP611FL1,OP60FFL1,CPH2745,CPH2747,CPH2749"
 	export FOX_TARGET_DEVICES="$TARGET_DEVICE_ALT"

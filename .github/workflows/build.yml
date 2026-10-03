@@ -266,6 +266,7 @@ jobs:
           export CCACHE_SLOPPINESS=time_macros,include_file_mtime,file_macro
           export CCACHE_COMPILERCHECK=content
 
+          export SKIP_ABI_CHECKS=true
           source build/envsetup.sh
           lunch "$LUNCH_TARGET"
           mka -j4 adbd recoveryimage
