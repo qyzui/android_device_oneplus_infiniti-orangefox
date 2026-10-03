@@ -1,4 +1,4 @@
-name: OrangeFox R12 Build
+name: OrangeFox 16 Build
 
 on:
   workflow_dispatch:
@@ -6,11 +6,11 @@ on:
       manifest_url:
         description: 'OrangeFox manifest repository URL'
         required: true
-        default: 'https://gitlab.com/OrangeFox/sync.git'
+        default: 'https://gitlab.com/OrangeFox/Manifest.git'
       manifest_branch:
         description: 'OrangeFox sync branch'
         required: true
-        default: '14.1'
+        default: 'fox_16.0'
       device_tree_url:
         description: 'Device tree repository URL'
         required: true
@@ -112,13 +112,11 @@ jobs:
           echo "$HOME/bin" >> "$GITHUB_PATH"
           "$HOME/bin/repo" --version
 
-      - name: Initialize OrangeFox source
+      - name: Initialize OrangeFox 16 source
         run: |
           cd "$GITHUB_WORKSPACE"
-          rm -rf "$GITHUB_WORKSPACE/orangefox-sync"
-          git clone --depth=1 --single-branch "$MANIFEST_URL" "$GITHUB_WORKSPACE/orangefox-sync"
-          cd "$GITHUB_WORKSPACE/orangefox-sync"
-          ./orangefox_sync.sh --branch "$MANIFEST_BRANCH" --path "$GITHUB_WORKSPACE"
+          repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
+          repo sync -c -j4 --no-clone-bundle --no-tags
           echo "Removing OrangeFox repo metadata..."
           rm -rf "$GITHUB_WORKSPACE/.repo"
           find "$GITHUB_WORKSPACE" -type d -name ".git" -prune -exec rm -rf {} +
@@ -130,7 +128,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-orangefox14.1-ccache-${{ github.run_id }}
+          key: ${{ runner.os }}-orangefox16.0-ccache-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-orangefox14.1-ccache-
 
