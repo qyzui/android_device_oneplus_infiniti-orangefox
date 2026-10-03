@@ -82,10 +82,7 @@ jobs:
           sudo swapoff -a 2>/dev/null || true
           sudo rm -f /swapfile
 
-          TOTAL_RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
-          SWAP_MB=$((TOTAL_RAM_MB * 2))
-          [ "$SWAP_MB" -lt 8192 ] && SWAP_MB=8192
-          [ "$SWAP_MB" -gt 32768 ] && SWAP_MB=32768
+          SWAP_MB=5120
 
           sudo fallocate -l "${SWAP_MB}M" /swapfile
           sudo chmod 600 /swapfile
@@ -111,6 +108,8 @@ jobs:
           chmod a+rx "$HOME/bin/repo"
           echo "$HOME/bin" >> "$GITHUB_PATH"
           "$HOME/bin/repo" --version
+          echo "Disk usage after repo installation:"
+          df -h
 
       - name: Initialize OrangeFox 16 source
         shell: bash
