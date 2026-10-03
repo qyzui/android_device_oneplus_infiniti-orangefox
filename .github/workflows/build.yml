@@ -268,7 +268,7 @@ jobs:
 
           source build/envsetup.sh
           lunch "$LUNCH_TARGET"
-          mka -j2 adbd recoveryimage
+          mka -j4 adbd recoveryimage
 
       - name: Show ccache statistics
         if: always()
