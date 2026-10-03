@@ -82,7 +82,6 @@ AB_OTA_PARTITIONS += \
     my_product \
     my_region \
     my_stock \
-    system_dlkm_oki 
 
 # Verified Boot
 BOARD_AVB_ENABLE := true
@@ -98,7 +97,7 @@ BOARD_QTI_DYNAMIC_PARTITIONS_SIZE := 18903728128
 BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST := \
 	system system_ext product vendor vendor_dlkm odm
 BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST += \
-	my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_stock system_dlkm_oki
+	my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_stock
 
 BOARD_PARTITION_LIST := $(call to-upper, $(BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST))
 $(foreach p, $(BOARD_PARTITION_LIST), $(eval BOARD_$(p)IMAGE_FILE_SYSTEM_TYPE := erofs))
