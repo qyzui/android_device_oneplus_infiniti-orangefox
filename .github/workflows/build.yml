@@ -113,15 +113,68 @@ jobs:
           "$HOME/bin/repo" --version
 
       - name: Initialize OrangeFox 16 source
+        shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
+
+          echo "===== DISK BEFORE REPO INIT ====="
+          df -h
+          echo "===== WORKSPACE BEFORE REPO INIT ====="
+          du -sh "$GITHUB_WORKSPACE" 2>/dev/null || true
+
           repo init --depth=1 -u "$MANIFEST_URL" -b "$MANIFEST_BRANCH"
+
+          echo "===== DISK AFTER REPO INIT ====="
+          df -h
+          echo "===== REPO SIZE AFTER REPO INIT ====="
+          du -sh "$GITHUB_WORKSPACE/.repo" 2>/dev/null || true
+          du -sh "$GITHUB_WORKSPACE" 2>/dev/null || true
+
+          echo "===== STARTING REPO SYNC ====="
+
+          (
+            while true; do
+              echo ""
+              echo "===== LIVE DISK MONITOR $(date '+%Y-%m-%d %H:%M:%S') ====="
+              df -h "$GITHUB_WORKSPACE"
+              echo "--- workspace ---"
+              du -sh "$GITHUB_WORKSPACE" 2>/dev/null || true
+              echo "--- .repo ---"
+              du -sh "$GITHUB_WORKSPACE/.repo" 2>/dev/null || true
+              echo "--- top-level directories ---"
+              du -sh "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null | sort -h | tail -20 || true
+              sleep 10
+            done
+          ) &
+          MONITOR_PID=$!
+
           repo sync -c -j4 --no-clone-bundle --no-tags
-          echo "Removing OrangeFox repo metadata..."
+          SYNC_STATUS=$?
+
+          kill "$MONITOR_PID" 2>/dev/null || true
+          wait "$MONITOR_PID" 2>/dev/null || true
+
+          echo "===== REPO SYNC EXIT STATUS: $SYNC_STATUS ====="
+          echo "===== DISK AFTER REPO SYNC ====="
+          df -h
+          echo "===== WORKSPACE AFTER REPO SYNC ====="
+          du -sh "$GITHUB_WORKSPACE" 2>/dev/null || true
+          echo "===== .repo AFTER REPO SYNC ====="
+          du -sh "$GITHUB_WORKSPACE/.repo" 2>/dev/null || true
+
+          if [ "$SYNC_STATUS" -ne 0 ]; then
+            echo "repo sync failed."
+            exit "$SYNC_STATUS"
+          fi
+
+          echo "===== REMOVING .repo AND ALL .git ====="
           rm -rf "$GITHUB_WORKSPACE/.repo"
           find "$GITHUB_WORKSPACE" -type d -name ".git" -prune -exec rm -rf {} +
-          echo "Disk usage after removing .repo and .git:"
+
+          echo "===== DISK AFTER CLEANUP ====="
           df -h
+          echo "===== WORKSPACE AFTER CLEANUP ====="
+          du -sh "$GITHUB_WORKSPACE" 2>/dev/null || true
 
       - name: Restore ccache
         id: ccache
